@@ -84,32 +84,7 @@ const AdminPage = () => {
     }));
   };
 
-  const handleImageUpload = async (file: File) => {
-    try {
-      if (!file) {
-        throw new Error('No file provided for upload');
-      }
 
-      console.log('Starting image upload to IPFS...', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      });
-
-      const { ipfsUrl, ipfsHash } = await uploadToPinata(file);
-      
-      if (!ipfsUrl || !ipfsHash) {
-        throw new Error('Upload successful but missing IPFS URL or hash');
-      }
-
-      console.log('Image uploaded to IPFS:', { ipfsUrl, ipfsHash });
-      return { url: ipfsUrl, ipfsHash };
-    } catch (error) {
-      console.error('Image upload error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to upload image to IPFS';
-      throw new Error(errorMessage);
-    }
-  };
 
   const handleSubmit = async () => {
     if (!materialInput.name || !materialInput.type) {
