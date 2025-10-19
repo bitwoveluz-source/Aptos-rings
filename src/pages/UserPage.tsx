@@ -241,14 +241,14 @@ const UserPage: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedCore, setSelectedCore] = useState('');
   const [selectedChannels, setSelectedChannels] = useState('single'); // default to single
-  const [aptPrice, setAptPrice] = useState<number>(8.25); // Default price until fetched
   const [inlays, setInlays] = useState<string[]>(['']);
   const [engraving, setEngraving] = useState('');
   const [selectedFinish, setSelectedFinish] = useState('');
+  const [aptPrice, setAptPrice] = useState<number>(8.25);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
   useEffect(() => {
-    const fetchAptosPrice = async () => {
+    async function updatePrice() {
       try {
         setIsLoadingPrice(true);
         const response = await fetch(
@@ -263,12 +263,11 @@ const UserPage: React.FC = () => {
       } finally {
         setIsLoadingPrice(false);
       }
-    };
+    }
     
-    fetchAptosPrice(); // Initial fetch
-    const interval = setInterval(fetchAptosPrice, 5 * 60 * 1000); // Update every 5 minutes
-    
-    return () => clearInterval(interval); // Cleanup on unmount
+    updatePrice();
+    const interval = setInterval(updatePrice, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isMinting, setIsMinting] = useState(false);
