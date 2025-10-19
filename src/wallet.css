@@ -1,0 +1,24 @@
+/* Wallet button styles */
+.ant-btn {
+  height: 40px;
+  padding: 6.4px 15px;
+  border-radius: 8px;
+  background: #007bff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.ant-btn:hover {
+  background: #0056b3;
+}
+
+.wallet-selector {
+  margin-right: 16px;
+}
