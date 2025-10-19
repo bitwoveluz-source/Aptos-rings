@@ -84,8 +84,6 @@ const AdminPage = () => {
     }));
   };
 
-
-
   const handleSubmit = async () => {
     if (!materialInput.name || !materialInput.type) {
       toast({
