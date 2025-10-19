@@ -245,29 +245,28 @@ const UserPage: React.FC = () => {
   const [inlays, setInlays] = useState<string[]>(['']);
   const [engraving, setEngraving] = useState('');
   const [selectedFinish, setSelectedFinish] = useState('');
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
-  const fetchAptosPrice = async () => {
-    try {
-      const response = await fetch(
-        'https://api.coingecko.com/api/v3/simple/price?ids=aptos&vs_currencies=usd'
-      );
-      const data = await response.json();
-      return data.aptos.usd;
-    } catch (error) {
-      console.error('Error fetching APT price:', error);
-      return aptPrice; // Return current price if fetch fails
-    }
-  };
-
-  // Fetch APT price on component mount and every 5 minutes
   useEffect(() => {
-    const updatePrice = async () => {
-      const price = await fetchAptosPrice();
-      setAptPrice(price);
+    const fetchAptosPrice = async () => {
+      try {
+        setIsLoadingPrice(true);
+        const response = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=aptos&vs_currencies=usd'
+        );
+        const data = await response.json();
+        if (data.aptos?.usd) {
+          setAptPrice(data.aptos.usd);
+        }
+      } catch (error) {
+        console.error('Error fetching APT price:', error);
+      } finally {
+        setIsLoadingPrice(false);
+      }
     };
     
-    updatePrice(); // Initial fetch
-    const interval = setInterval(updatePrice, 5 * 60 * 1000); // Update every 5 minutes
+    fetchAptosPrice(); // Initial fetch
+    const interval = setInterval(fetchAptosPrice, 5 * 60 * 1000); // Update every 5 minutes
     
     return () => clearInterval(interval); // Cleanup on unmount
   }, []);
