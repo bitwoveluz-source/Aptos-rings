@@ -12,7 +12,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: ['@telegram-apps/bridge']
+
     }
   }
 });
