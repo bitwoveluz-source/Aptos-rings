@@ -269,6 +269,7 @@ const UserPage: React.FC = () => {
     const interval = setInterval(updatePrice, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isMinting, setIsMinting] = useState(false);
   const [mintStatus, setMintStatus] = useState<'idle' | 'success' | 'error'>('idle');
