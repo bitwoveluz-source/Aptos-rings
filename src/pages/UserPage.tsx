@@ -241,10 +241,36 @@ const UserPage: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedCore, setSelectedCore] = useState('');
   const [selectedChannels, setSelectedChannels] = useState('single'); // default to single
-  const aptPrice = 8.25; // Default price
+  const [aptPrice, setAptPrice] = useState<number>(8.25); // Default price until fetched
   const [inlays, setInlays] = useState<string[]>(['']);
   const [engraving, setEngraving] = useState('');
   const [selectedFinish, setSelectedFinish] = useState('');
+
+  const fetchAptosPrice = async () => {
+    try {
+      const response = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=aptos&vs_currencies=usd'
+      );
+      const data = await response.json();
+      return data.aptos.usd;
+    } catch (error) {
+      console.error('Error fetching APT price:', error);
+      return aptPrice; // Return current price if fetch fails
+    }
+  };
+
+  // Fetch APT price on component mount and every 5 minutes
+  useEffect(() => {
+    const updatePrice = async () => {
+      const price = await fetchAptosPrice();
+      setAptPrice(price);
+    };
+    
+    updatePrice(); // Initial fetch
+    const interval = setInterval(updatePrice, 5 * 60 * 1000); // Update every 5 minutes
+    
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, []);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isMinting, setIsMinting] = useState(false);
   const [mintStatus, setMintStatus] = useState<'idle' | 'success' | 'error'>('idle');
