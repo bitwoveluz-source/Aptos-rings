@@ -1,6 +1,16 @@
 # Vercel configuration for Vite React app
-
-# Vercel will auto-detect Vite, but this ensures correct build settings
-[build]
-  command = "vite build"
-  publish = "dist"
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    }
+  ],
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
+  "routes": [
