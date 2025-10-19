@@ -32,9 +32,6 @@ import doubleChannelImg from '../images/double.png';
 // @ts-ignore
 import tripleChannelImg from '../images/triple.png';
 
-const COLLECTION_NAME = "Aptos Rings";
-const COLLECTION_DESCRIPTION = "Aptos Rings";
-
 // Helper to filter materials by type and entry
 const filterMaterialsByTypeAndEntry = (materials: Material[], type: string, entry: string) => {
   return materials.filter((material: Material) => material.type === type && material.entry === entry);
