@@ -20,13 +20,14 @@ import {
   useDisclosure,
 } from '@chakra-ui/react';
 import { uploadToPinata } from '../services/pinata';
-import { collection, getDocs, doc, runTransaction } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { WalletSelector } from "@aptos-labs/wallet-adapter-ant-design";
 
 // Constants for NFT minting
-// ...existing code...
+const CREATOR_ADDRESS = "0x368dc22a8a380858874b6a79c34c959f11c2d081281a69c018591ebfd952ea6c";
+const COLLECTION_OWNER_ID = "0x2e1140332e12c95875168a00364f4744b2e2b33ca554bfd3beef91ba23cbf164";
 
 // @ts-ignore
 import singleChannelImg from '../images/single.png';
@@ -85,15 +86,13 @@ const getNextRingNumber = async (): Promise<number> => {
     const result = await runTransaction(db, async (transaction) => {
       const counterDoc = await transaction.get(counterRef);
       
-    import { collection, getDocs, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
+      if (!counterDoc.exists()) {
         // Initialize counter if it doesn't exist
         transaction.set(counterRef, { count: 1 });
         return 1;
       }
       
       const newCount = (counterDoc.data().count || 0) + 1;
-    const CREATOR_ADDRESS = "0x368dc22a8a380858874b6a79c34c959f11c2d081281a69c018591ebfd952ea6c";
-    const COLLECTION_OWNER_ID = "0x2e1140332e12c95875168a00364f4744b2e2b33ca554bfd3beef91ba23cbf164";
       transaction.update(counterRef, { count: newCount });
       return newCount;
     });
@@ -106,11 +105,22 @@ const getNextRingNumber = async (): Promise<number> => {
   }
 };
 
-// ...existing code...
+const fetchAptosPrice = async (): Promise<number> => {
+  try {
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=aptos&vs_currencies=usd'
+    );
+    const data = await response.json();
+    return data.aptos.usd;
+  } catch (error) {
+    console.error('Error fetching APT price:', error);
+    return 8.25; // Fallback price if API fails
+  }
+};
 
 const UserPage: React.FC = () => {
   // Fetch materials from Firebase on mount
-      const [aptPrice, setAptPrice] = useState<number>(8.25); // Default price until we fetch real price
+  useEffect(() => {
     const fetchMaterials = async () => {
       try {
         const materialsCollection = collection(db, 'materials');
@@ -246,7 +256,7 @@ const UserPage: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedCore, setSelectedCore] = useState('');
   const [selectedChannels, setSelectedChannels] = useState('single'); // default to single
-  const [aptPrice] = useState<number>(8.25); // Default price until we fetch real price
+  const [aptPrice, setAptPrice] = useState<number>(8.25); // Default price until we fetch real price
   const [inlays, setInlays] = useState<string[]>(['']);
   const [engraving, setEngraving] = useState('');
   const [selectedFinish, setSelectedFinish] = useState('');
@@ -382,15 +392,25 @@ const UserPage: React.FC = () => {
 
       const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
       const metadataFile = new File([metadataBlob], `ring-${ringNumber}-metadata.json`, { type: 'application/json' });
-      return {
-        id: doc.id,
-        name: data.name,
-        type: data.type,
-        entry: data.entry,
-        imageUrl: data.imageUrl,
-        ipfsHash: data.ipfsHash,
-        price: data.price ? Number(data.price) : 0,
-      // ...existing code...
+      const { ipfsUrl: metadataUrl } = await uploadToPinata(metadataFile);
+
+      // Calculate total price in Octas
+      setMintMessage('Submitting mint transaction...');
+      const totals = calculateTotalPrice();
+      const mintPriceOctas = Math.floor(totals.aptTotal * 100000000);
+
+      // Prepare the transaction payload for ringminter3::mint_nft
+      const payload = {
+        type: "entry_function_payload",
+        function: "0x368dc22a8a380858874b6a79c34c959f11c2d081281a69c018591ebfd952ea6c::ringminter3::mint_nft",
+        type_arguments: [],
+        arguments: [
+          "0x368dc22a8a380858874b6a79c34c959f11c2d081281a69c018591ebfd952ea6c", // creator_collection_owner_address
+          "0x2e1140332e12c95875168a00364c4744b2e2b33ca554bfd3beef91ba23cbf164", // collection_owner_id
+          metadataUrl, // metadata_uri
+          mintPriceOctas // mint_price (u64)
+        ],
+      };
 
       if (!account) {
         throw new Error('Please connect your wallet first');
