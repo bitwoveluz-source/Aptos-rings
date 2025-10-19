@@ -58,7 +58,7 @@ const AdminPage = () => {
       console.log('Fetching materials...');
       const materialsRef = collection(db, 'materials');
       const materialsSnapshot = await getDocs(materialsRef);
-  const materialsList = materialsSnapshot.docs.map(doc => ({
+      const materialsList = materialsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Material[];
@@ -78,7 +78,7 @@ const AdminPage = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-  setMaterialInput(prev => ({
+    setMaterialInput(prev => ({
       ...prev,
       [name]: value
     }));
@@ -230,7 +230,7 @@ const AdminPage = () => {
       console.log('Starting delete process for material:', materialId);
       
       // Get the material data
-  const material = materials.find((m: Material) => m.id === materialId);
+      const material = materials.find(m => m.id === materialId);
       console.log('Found material:', material);
       
       // Delete the document from Firestore
@@ -261,7 +261,7 @@ const AdminPage = () => {
   };
 
   const renderMaterialsByType = (type: string) => {
-  const filteredMaterials = materials.filter((material: Material) => material.type === type);
+    const filteredMaterials = materials.filter(material => material.type === type);
     return (
       <Box mb={4}>
         <Heading size="md" mb={2} textTransform="capitalize">{type} Materials</Heading>
@@ -269,7 +269,7 @@ const AdminPage = () => {
           <Text color="gray.500">No {type} materials added yet</Text>
         ) : (
           <VStack align="stretch" spacing={2}>
-            {filteredMaterials.map((material: Material) => (
+            {filteredMaterials.map(material => (
               <HStack key={material.id} justify="space-between" p={2} bg="gray.50" borderRadius="md">
                 <HStack spacing={3}>
                   {material.imageUrl && (
