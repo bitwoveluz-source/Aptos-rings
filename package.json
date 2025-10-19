@@ -17,7 +17,7 @@
     "@chakra-ui/react": "^2.8.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
-    "@telegram-apps/bridge": "^2.11.0",
+  "@telegram-apps/bridge": "^1.0.0",
     "@wallet-standard/core": "^1.1.1",
     "aptos": "^1.19.0",
     "axios": "^1.12.2",
