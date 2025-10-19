@@ -241,7 +241,7 @@ const UserPage: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedCore, setSelectedCore] = useState('');
   const [selectedChannels, setSelectedChannels] = useState('single'); // default to single
-  const [aptPrice] = useState<number>(8.25); // Default price
+  const aptPrice = 8.25; // Default price
   const [inlays, setInlays] = useState<string[]>(['']);
   const [engraving, setEngraving] = useState('');
   const [selectedFinish, setSelectedFinish] = useState('');
