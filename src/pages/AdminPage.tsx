@@ -39,6 +39,81 @@ interface Material extends MaterialInput {
 }
 
 const AdminPage = () => {
+  // Handle input change for material form
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setMaterialInput(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle submit for material form
+  const handleSubmit = async () => {
+    if (!materialInput.name || !materialInput.type) {
+      toast({
+        title: 'Error',
+        description: 'Please fill in all fields',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    setIsUploading(true);
+    try {
+      // Build metadata for Pinata
+      const metadata = {
+        name: materialInput.name,
+        type: materialInput.type,
+        entry: materialInput.entry || 'single',
+        price: materialInput.price,
+      };
+      const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
+      const metadataFile = new File([metadataBlob], `${materialInput.name.toLowerCase().replace(/\s+/g, '-')}-metadata.json`, { type: 'application/json' });
+      // Upload metadata to Pinata
+      const { ipfsUrl: metadataUrl, ipfsHash: metadataHash } = await uploadToPinata(metadataFile);
+      // Upload image if selected
+      let imageUrl = '';
+      let imageHash = '';
+      if (selectedImage) {
+        const { ipfsUrl, ipfsHash } = await uploadToPinata(selectedImage);
+        imageUrl = ipfsUrl;
+        imageHash = ipfsHash;
+      }
+      // Add new material with IPFS data
+      const materialsRef = collection(db, 'materials');
+      const newMaterial = {
+        ...materialInput,
+        imageUrl,
+        ipfsHash: imageHash,
+        metadataUrl,
+        metadataHash,
+        createdAt: new Date().toISOString(),
+      };
+      await addDoc(materialsRef, newMaterial);
+      setMaterialInput({ name: '', type: '', entry: '', imageUrl: '', price: 0 });
+      setSelectedImage(null);
+      toast({
+        title: 'Success',
+        description: 'Material added successfully!',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      await fetchMaterials();
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to add material',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
   type StatusType = 'all' | 'in queue' | 'crafting' | 'in transit' | 'completed';
   const [statusFilter, setStatusFilter] = useState<StatusType>('all');
   type RingProfile = {
@@ -179,14 +254,54 @@ const AdminPage = () => {
       {profiles.length === 0 ? (
         <Text color="gray.500">No profiles have created a ring yet.</Text>
       ) : (
-        <Box overflowX="auto">
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 12px' }}>
+        <Box overflowX="auto" style={{ maxWidth: '100vw' }}>
+          <table className="ring-table" style={{ width: '100%', minWidth: 320, borderCollapse: 'separate', borderSpacing: '0 12px', tableLayout: 'fixed' }}>
+            <style>{`
+              @media (max-width: 600px) {
+                .ring-table th, .ring-table td {
+                  padding: 2px !important;
+                  font-size: 9px !important;
+                  min-width: 20px !important;
+                }
+                .ring-table .ring-img {
+                  width: 40px !important;
+                  height: 40px !important;
+                  border-radius: 4px !important;
+                  display: block !important;
+                  margin-left: auto !important;
+                  margin-right: auto !important;
+                }
+                .ring-table .attr-li {
+                  font-size: 8px !important;
+                  padding: 1px 1px !important;
+                  border-radius: 1px !important;
+                }
+                .ring-table .delivery {
+                  font-size: 7px !important;
+                  padding: 1px 1px !important;
+                  border-radius: 1px !important;
+                }
+                .ring-table .status-select {
+                  font-size: 8px !important;
+                  min-width: 12px !important;
+                  padding: 1px 1px !important;
+                }
+                .ring-table .status-cell {
+                  min-width: 12px !important;
+                  padding: 1px !important;
+                }
+                .ring-table {
+                  table-layout: fixed !important;
+                  min-width: 180px !important;
+                }
+              }
+            `}</style>
             <thead>
               <tr style={{ background: '#f7fafc' }}>
-                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0' }}>Wallet Address</th>
-                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0' }}>Ring Image</th>
-                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0' }}>Attributes</th>
-                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0' }}>Status</th>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0', minWidth: 60 }}>Wallet Address</th>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0', minWidth: 50 }}>Ring Image</th>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0', minWidth: 80 }}>Attributes</th>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0', minWidth: 50 }}>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -196,24 +311,24 @@ const AdminPage = () => {
                   const key = profile.id + '-' + idx;
                   const meta = ringMetas[key];
                   return (
-                    <tr key={key} style={{ background: '#f9fafb', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', transition: 'box-shadow 0.2s', border: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '16px', fontFamily: 'monospace', fontSize: '15px', color: '#2b6cb0', background: '#edf2f7', borderRadius: '8px' }}>
+                    <tr key={key} className="ring-table-row" style={{ background: '#f9fafb', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', transition: 'box-shadow 0.2s', border: '1px solid #e2e8f0' }}>
+                      <td className="ring-table" style={{ padding: '16px', fontFamily: 'monospace', fontSize: '15px', color: '#2b6cb0', background: '#edf2f7', borderRadius: '8px', minWidth: 60 }}>
                         {profile.walletAddress
                           ? `${profile.walletAddress.slice(0, 6)}...${profile.walletAddress.slice(-6)}`
                           : '—'}
                       </td>
-                      <td style={{ padding: '16px', background: '#fff', borderRadius: '8px', textAlign: 'center' }}>
+                      <td className="ring-table" style={{ padding: '16px', background: '#fff', borderRadius: '8px', textAlign: 'center', minWidth: 50 }}>
                         {meta && meta.image ? (
-                          <img src={meta.image} alt="Ring" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #cbd5e0', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }} />
+                          <img className="ring-img" src={meta.image} alt="Ring" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #cbd5e0', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }} />
                         ) : (ring.imageIpfs ? (
-                          <img src={ring.imageIpfs} alt="Ring" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #cbd5e0', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }} />
+                          <img className="ring-img" src={ring.imageIpfs} alt="Ring" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #cbd5e0', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }} />
                         ) : '—')}
                       </td>
-                      <td style={{ padding: '16px', background: '#f7fafc', borderRadius: '8px' }}>
+                      <td className="ring-table" style={{ padding: '16px', background: '#f7fafc', borderRadius: '8px', minWidth: 80 }}>
                         {meta && Array.isArray(meta.attributes) ? (
                           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                             {meta.attributes.map((attr: any, i: number) => (
-                              <li key={i} style={{ fontSize: '14px', color: '#2d3748', marginBottom: '4px', background: '#e6fffa', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>
+                              <li className="attr-li" key={i} style={{ fontSize: '14px', color: '#2d3748', marginBottom: '4px', background: '#e6fffa', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>
                                 <strong>{attr.trait_type}:</strong> {attr.value}
                               </li>
                             ))}
@@ -221,19 +336,19 @@ const AdminPage = () => {
                         ) : (Array.isArray(ring.attributes) ? (
                           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                             {ring.attributes.map((attr: any, i: number) => (
-                              <li key={i} style={{ fontSize: '14px', color: '#2d3748', marginBottom: '4px', background: '#e6fffa', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>
+                              <li className="attr-li" key={i} style={{ fontSize: '14px', color: '#2d3748', marginBottom: '4px', background: '#e6fffa', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>
                                 <strong>{attr.trait_type}:</strong> {attr.value}
                               </li>
                             ))}
                           </ul>
                         ) : '—')}
                         {ring.deliveryAddress && (
-                          <div style={{ fontSize: '13px', color: '#718096', marginTop: '6px', background: '#fefcbf', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>Delivery: {ring.deliveryAddress}</div>
+                          <div className="delivery" style={{ fontSize: '13px', color: '#718096', marginTop: '6px', background: '#fefcbf', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>Delivery: {ring.deliveryAddress}</div>
                         )}
                       </td>
-                      <td style={{ padding: '16px', background: '#fff', borderRadius: '8px', fontWeight: 'bold', color: '#38a169', textAlign: 'center' }}>
-                        <select
-                          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', fontWeight: 'bold', color: '#2d3748', background: '#f7fafc' }}
+                      <td className="ring-table status-cell" style={{ padding: '16px', background: '#fff', borderRadius: '8px', fontWeight: 'bold', color: '#38a169', textAlign: 'center', minWidth: 50 }}>
+                        <select className="status-select"
+                          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', fontWeight: 'bold', color: '#2d3748', background: '#f7fafc', fontSize: '13px', minWidth: '40px' }}
                           value={ring.status || ''}
                           onChange={async (e) => {
                             const newStatus = e.target.value;
@@ -263,6 +378,7 @@ const AdminPage = () => {
                           <option value="in queue">in queue</option>
                           <option value="crafting">crafting</option>
                           <option value="in transit">in transit</option>
+                          <option value="completed">completed</option>
                         </select>
                       </td>
                     </tr>
@@ -286,127 +402,8 @@ const AdminPage = () => {
         ...doc.data()
       })) as Material[];
       console.log('Materials fetched:', materialsList);
-  setMaterials(materialsList);
-    } catch (error) {
-      console.error('Error fetching materials:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch materials',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-    }
-  };
+      setMaterials(materialsList);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setMaterialInput(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSubmit = async () => {
-    if (!materialInput.name || !materialInput.type) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all fields',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-    if (!selectedImage) {
-      toast({
-        title: 'Error',
-        description: 'Please select an image',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-    setIsUploading(true);
-    try {
-        // Check for existing material (name+type+entry must be unique)
-        const materialsRef = collection(db, 'materials');
-        const q = query(
-          materialsRef,
-          where('name', '==', materialInput.name),
-          where('type', '==', materialInput.type),
-          where('entry', '==', materialInput.entry || '')
-        );
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          toast({
-            title: 'Error',
-            description: `A material with name "${materialInput.name}", type "${materialInput.type}", and entry "${materialInput.entry}" already exists`,
-            status: 'error',
-            duration: 3000,
-            isClosable: true,
-          });
-          setIsUploading(false);
-          return;
-        }
-      // Upload image to Pinata first
-      const { ipfsUrl: imageUrl, ipfsHash: imageHash } = await uploadToPinata(selectedImage);
-      if (!imageUrl || !imageHash) {
-        throw new Error('Failed to get IPFS URL or hash from image upload');
-      }
-
-      // Create metadata JSON
-      const metadata = {
-        name: `Ring Material - ${materialInput.name}`,
-        description: `Aptos Rings NFT Material - ${materialInput.type}`,
-        image: imageUrl,
-        attributes: [
-          {
-            trait_type: "Material Type",
-            value: materialInput.type
-          },
-          {
-            trait_type: "Material Name",
-            value: materialInput.name
-          },
-          {
-            trait_type: "Entry Type",
-            value: materialInput.entry || "single"
-          }
-        ]
-      };
-
-      // Convert metadata to Blob for upload
-      const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
-      const metadataFile = new File([metadataBlob], `${materialInput.name.toLowerCase().replace(/\s+/g, '-')}-metadata.json`, { type: 'application/json' });
-      
-      // Upload metadata to Pinata
-      const { ipfsUrl: metadataUrl, ipfsHash: metadataHash } = await uploadToPinata(metadataFile);
-      if (!metadataUrl || !metadataHash) {
-        throw new Error('Failed to get IPFS URL or hash from metadata upload');
-      }
-
-      // Add new material with IPFS data
-      const newMaterial = {
-        ...materialInput,
-        imageUrl: imageUrl,
-        ipfsHash: imageHash,
-        metadataUrl: metadataUrl,
-        metadataHash: metadataHash,
-        createdAt: new Date().toISOString(),
-      };
-      await addDoc(materialsRef, newMaterial);
-      setMaterialInput({ name: '', type: '', entry: '', imageUrl: '', price: 0 });
-      setSelectedImage(null);
-      toast({
-        title: 'Success',
-        description: 'Material added successfully!',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
-      await fetchMaterials();
     } catch (err) {
       const error = err as Error;
       toast({
