@@ -17,10 +17,11 @@ import {
   Image,
 } from "@chakra-ui/react";
 import { DeleteIcon } from '@chakra-ui/icons';
+import { useRef } from 'react';
 import { collection, addDoc, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { uploadToPinata } from '../services/pinata';
+import { uploadToPinata, deleteFromPinata } from '../services/pinata';
 // No duplicate import needed
 
 interface MaterialInput {
@@ -213,6 +214,52 @@ const AdminPage = () => {
     }
   };
 
+  // Helper: upload image to Pinata and update Firestore
+  const handleUploadActualImage = async (profileId: string, ringIdx: number, file: File) => {
+    try {
+      // Get current profile data
+      const profileSnap = await getDocs(collection(db, 'walletProfiles'));
+      const profileDoc = profileSnap.docs.find(d => d.id === profileId);
+      if (!profileDoc) return;
+      const profileData = profileDoc.data();
+      const rings = Array.isArray(profileData.rings) ? [...profileData.rings] : [];
+      // Use a unique name for the ring: prefer attributes 'name', 'index', or fallback to idx
+      let ringName = `ring-${ringIdx + 1}`;
+      if (rings[ringIdx]?.attributes) {
+        const nameAttr = rings[ringIdx].attributes.find((a: any) => a.trait_type?.toLowerCase() === 'name');
+        const idxAttr = rings[ringIdx].attributes.find((a: any) => a.trait_type?.toLowerCase() === 'index' || a.trait_type?.toLowerCase() === 'ring number' || a.trait_type?.toLowerCase() === 'number');
+        if (nameAttr && nameAttr.value) {
+          ringName = nameAttr.value.replace(/\s+/g, '-').toLowerCase();
+        } else if (idxAttr && idxAttr.value) {
+          ringName = `ring-${idxAttr.value}`;
+        }
+      }
+      // If actualImage exists, delete it from Pinata
+      if (rings[ringIdx]?.actualImage) {
+        try {
+          await deleteFromPinata(rings[ringIdx].actualImage);
+        } catch (delErr) {
+          // Ignore delete errors, proceed to upload new image
+        }
+      }
+      // Create a new File with the desired name
+      const ext = file.name.split('.').pop() || 'png';
+      const namedFile = new File([file], `${ringName}-actual.${ext}`, { type: file.type });
+      const { ipfsUrl } = await uploadToPinata(namedFile);
+      rings[ringIdx] = { ...rings[ringIdx], actualImage: ipfsUrl };
+      const profileRef = doc(db, 'walletProfiles', profileId);
+      await updateDoc(profileRef, { rings });
+      setProfiles(prev => prev.map(p =>
+        p.id === profileId
+          ? { ...p, rings: p.rings?.map((r, i) => i === ringIdx ? { ...r, actualImage: ipfsUrl } : r) }
+          : p
+      ));
+      toast({ title: 'Success', description: 'Actual image uploaded and saved!', status: 'success', duration: 3000, isClosable: true });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to upload actual image', status: 'error', duration: 3000, isClosable: true });
+    }
+  };
+
   // Render profiles in a table/grid
   const renderProfilesTable = () => (
     <Box mt={10}>
@@ -323,6 +370,28 @@ const AdminPage = () => {
                         ) : (ring.imageIpfs ? (
                           <img className="ring-img" src={ring.imageIpfs} alt="Ring" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #cbd5e0', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }} />
                         ) : '—')}
+                        {(ring.status === 'completed' || ring.status === 'in transit') && (
+                          <div style={{ marginTop: 8 }}>
+                            <input
+                              type="file"
+                              accept=".jpg,.jpeg,.png,.webp,.jfif"
+                              style={{ display: 'none' }}
+                              id={`actual-image-input-${key}`}
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) handleUploadActualImage(profile.id, idx, file);
+                              }}
+                            />
+                            <label htmlFor={`actual-image-input-${key}`}>
+                              <Button size="xs" colorScheme="purple" as="span">Upload Actual Image</Button>
+                            </label>
+                            {ring.actualImage && (
+                              <div style={{ marginTop: 4 }}>
+                                <a href={ring.actualImage} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#6b46c1' }}>View Actual Image</a>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="ring-table" style={{ padding: '16px', background: '#f7fafc', borderRadius: '8px', minWidth: 80 }}>
                         {meta && Array.isArray(meta.attributes) ? (
@@ -348,7 +417,7 @@ const AdminPage = () => {
                       </td>
                       <td className="ring-table status-cell" style={{ padding: '16px', background: '#fff', borderRadius: '8px', fontWeight: 'bold', color: '#38a169', textAlign: 'center', minWidth: 50 }}>
                         <select className="status-select"
-                          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', fontWeight: 'bold', color: '#2d3748', background: '#f7fafc', fontSize: '13px', minWidth: '40px' }}
+                          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #444', fontWeight: 'bold', color: '#e2e8f0', background: '#222', fontSize: '13px', minWidth: '40px' }}
                           value={ring.status || ''}
                           onChange={async (e) => {
                             const newStatus = e.target.value;
@@ -511,6 +580,7 @@ const AdminPage = () => {
               value={materialInput.name}
               onChange={handleInputChange}
               placeholder="Enter material name"
+              color="#111"
             />
           </FormControl>
           <FormControl mb={4} isRequired>
@@ -520,39 +590,18 @@ const AdminPage = () => {
               value={materialInput.entry}
               onChange={handleInputChange}
               placeholder="Select entry type"
+              bg="#222"
+              color="#e2e8f0"
+              _placeholder={{ color: '#a0aec0' }}
+              borderColor="#444"
+              sx={{ option: { background: '#222', color: '#e2e8f0' } }}
             >
               <option value="single">Single</option>
               <option value="double">Double</option>
               <option value="triple">Triple</option>
             </Select>
           </FormControl>
-
-        <FormControl mt={4}>
-          <FormLabel>Material Type</FormLabel>
-          <Select
-            name="type"
-            value={materialInput.type}
-            onChange={handleInputChange}
-            placeholder="Select material type"
-          >
-            <option value="core">Core</option>
-            <option value="inlay1">Inlay 1</option>
-            <option value="inlay2">Inlay 2</option>
-            <option value="inlay3">Inlay 3</option>
-            <option value="finish">Finish</option>
-          </Select>
-        </FormControl>
-
-        <FormControl mt={4}>
-          <FormLabel>Price</FormLabel>
-          <Input
-            name="price"
-            type="number"
-            value={materialInput.price || ''}
-            onChange={handleInputChange}
-            placeholder="Enter material price"
-          />
-        </FormControl>          <FormControl mt={4}>
+          <FormControl mt={4}>
             <FormLabel>Material Image</FormLabel>
             <Input
               type="file"
@@ -569,10 +618,9 @@ const AdminPage = () => {
                       duration: 3000,
                       isClosable: true,
                     });
-                    e.target.value = ''; // Reset input
+                    e.target.value = '';
                     return;
                   }
-
                   // Check file type
                   const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/jfif'];
                   if (!validTypes.includes(file.type)) {
@@ -583,16 +631,14 @@ const AdminPage = () => {
                       duration: 3000,
                       isClosable: true,
                     });
-                    e.target.value = ''; // Reset input
+                    e.target.value = '';
                     return;
                   }
-
                   console.log('File selected:', {
                     name: file.name,
                     type: file.type,
                     size: `${(file.size / (1024 * 1024)).toFixed(2)}MB`
                   });
-
                   setSelectedImage(file);
                 }
               }}

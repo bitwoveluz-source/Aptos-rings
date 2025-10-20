@@ -29,6 +29,7 @@ import { uploadToPinata } from '../services/pinata';
 import { collection, getDocs, doc, runTransaction, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { useNavigate } from 'react-router-dom';
 import { WalletSelector } from "@aptos-labs/wallet-adapter-ant-design";
 import { createOrGetWalletProfile, addMintedRingToProfile } from '../services/firebaseProfile';
 
@@ -114,6 +115,7 @@ const getNextRingNumber = async (): Promise<number> => {
 
 
 const UserPage: React.FC = () => {
+  const navigate = useNavigate();
   // Fetch materials from Firebase on mount
   useEffect(() => {
     const fetchMaterials = async () => {
@@ -121,7 +123,7 @@ const UserPage: React.FC = () => {
         const materialsCollection = collection(db, 'materials');
         const materialsSnapshot = await getDocs(materialsCollection);
         const materialsList = materialsSnapshot.docs.map(doc => {
-          const data = doc.data();
+          const data = doc.data() as any;
           return {
             id: doc.id,
             name: data.name,
@@ -171,7 +173,7 @@ const UserPage: React.FC = () => {
         duration: 3000,
         isClosable: true,
       });
-      return;
+  return;
     }
 
     // Capture the actual .ring-preview DOM node so the dialog shows the full-color ring
@@ -275,7 +277,6 @@ const UserPage: React.FC = () => {
         setIsLoadingPrice(false);
       }
     }
-    
     updatePrice();
     const interval = setInterval(updatePrice, 5 * 60 * 1000);
     return () => clearInterval(interval);
@@ -575,9 +576,21 @@ const UserPage: React.FC = () => {
 
   return (
     <Container maxW="container.xl" py={10}>
-      <Box mb={4} textAlign="right">
-        <WalletSelector />
-      </Box>
+      <Flex mb={{ base: 8, md: 4 }} justify="space-between" align="center">
+        <Box>
+          <Button
+            colorScheme="blue"
+            size="lg"
+            onClick={() => navigate('/GalleryPage')}
+            mb={{ base: 8, md: 8 }} // increased space below Gallery button
+          >
+            View Gallery
+          </Button>
+        </Box>
+        <Box textAlign="right" mb={{ base: 8, md: 8 }}>
+          <WalletSelector />
+        </Box>
+      </Flex>
       <Flex
         align="center"
         justify="center"
@@ -596,6 +609,12 @@ const UserPage: React.FC = () => {
           minH={{ base: '220px', md: '350px' }}
           className="ring-preview"
           sx={{
+            animation: 'ringHover 2.2s ease-in-out infinite',
+            '@keyframes ringHover': {
+              '0%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-12px)' },
+              '100%': { transform: 'translateY(0)' },
+            },
             '& > img': {
               position: 'absolute !important',
               top: '50%',
@@ -698,6 +717,11 @@ const UserPage: React.FC = () => {
               value={selectedCore}
               onChange={(e) => setSelectedCore(e.target.value)}
               fontSize={{ base: 'sm', md: 'md' }}
+              bg="#222"
+              color="#e2e8f0"
+              _placeholder={{ color: '#a0aec0' }}
+              borderColor="#444"
+              sx={{ option: { background: '#222', color: '#e2e8f0' } }}
             >
               {filterMaterialsByTypeAndEntry(materials, 'core', selectedChannels).map(material => (
                 <option key={material.id} value={material.name}>
@@ -757,6 +781,11 @@ const UserPage: React.FC = () => {
                   setInlays(newInlays);
                 }}
                 fontSize={{ base: 'sm', md: 'md' }}
+                bg="#222"
+                color="#e2e8f0"
+                _placeholder={{ color: '#a0aec0' }}
+                borderColor="#444"
+                sx={{ option: { background: '#222', color: '#e2e8f0' } }}
               >
                 {getInlayOptions(materials, 'inlay1', selectedChannels).map(material => (
                   <option key={material.id} value={material.name}>
@@ -777,6 +806,11 @@ const UserPage: React.FC = () => {
                     setInlays(newInlays);
                   }}
                   fontSize={{ base: 'sm', md: 'md' }}
+                  bg="#222"
+                  color="#e2e8f0"
+                  _placeholder={{ color: '#a0aec0' }}
+                  borderColor="#444"
+                  sx={{ option: { background: '#222', color: '#e2e8f0' } }}
                 >
                   {getInlayOptions(materials, 'inlay2', selectedChannels).map(material => (
                     <option key={material.id} value={material.name}>
@@ -798,6 +832,11 @@ const UserPage: React.FC = () => {
                     setInlays(newInlays);
                   }}
                   fontSize={{ base: 'sm', md: 'md' }}
+                  bg="#222"
+                  color="#e2e8f0"
+                  _placeholder={{ color: '#a0aec0' }}
+                  borderColor="#444"
+                  sx={{ option: { background: '#222', color: '#e2e8f0' } }}
                 >
                   {getInlayOptions(materials, 'inlay3', selectedChannels).map(material => (
                     <option key={material.id} value={material.name}>
@@ -813,6 +852,7 @@ const UserPage: React.FC = () => {
               value={engraving}
               onChange={(e) => setEngraving(e.target.value)}
               fontSize={{ base: 'sm', md: 'md' }}
+              color="#fff"
             />
 
             <Select
@@ -820,6 +860,11 @@ const UserPage: React.FC = () => {
               value={selectedFinish}
               onChange={(e) => setSelectedFinish(e.target.value)}
               fontSize={{ base: 'sm', md: 'md' }}
+              bg="#222"
+              color="#e2e8f0"
+              _placeholder={{ color: '#a0aec0' }}
+              borderColor="#444"
+              sx={{ option: { background: '#222', color: '#e2e8f0' } }}
             >
               {filterMaterialsByTypeAndEntry(materials, 'finish', selectedChannels).map(material => (
                 <option key={material.id} value={material.name}>
@@ -835,6 +880,7 @@ const UserPage: React.FC = () => {
                 value={deliveryAddress}
                 onChange={e => setDeliveryAddress(e.target.value)}
                 fontSize={{ base: 'sm', md: 'md' }}
+                color="rgba(255, 255, 255, 1)"
               />
             </Box>
 
@@ -1001,9 +1047,9 @@ const UserPage: React.FC = () => {
             {/* Ring Details Modal */}
             <AlertDialog isOpen={isRingModalOpen} onClose={handleCloseRingModal} isCentered leastDestructiveRef={cancelRef}>
               <AlertDialogOverlay />
-              <AlertDialogContent maxW="sm" textAlign="center" py={8}>
-                <AlertDialogHeader fontSize="lg" fontWeight="bold">Ring Details</AlertDialogHeader>
-                <AlertDialogBody>
+              <AlertDialogContent maxW="sm" textAlign="center" py={8} bg="rgba(255,255,255,0.85)">
+                <AlertDialogHeader fontSize="lg" fontWeight="bold" color="#222">Ring Details</AlertDialogHeader>
+                <AlertDialogBody color="#222">
                   {selectedRing && (
                     <>
                       <Box display="flex" justifyContent="center" alignItems="center" mb={6}>
@@ -1012,28 +1058,28 @@ const UserPage: React.FC = () => {
                       {/* Main attributes in bordered box */}
                       <Box border="1px solid #CBD5E0" borderRadius="10px" p={4} mb={3} display="inline-block" minW="240px" boxShadow="sm" bg="white">
                         <Flex justify="space-between" mb={2} gap={4}>
-                          <Text fontSize="md"><b>Core:</b> {getAttributeValue('Core', ringAttributes)}</Text>
-                          <Text fontSize="md"><b>Finish:</b> {getAttributeValue('Finish', ringAttributes)}</Text>
+                          <Text fontSize="md" color="#222"><b>Core:</b> {getAttributeValue('Core', ringAttributes)}</Text>
+                          <Text fontSize="md" color="#222"><b>Finish:</b> {getAttributeValue('Finish', ringAttributes)}</Text>
                         </Flex>
                         <Flex justify="space-between" mb={2} gap={4}>
-                          <Text fontSize="md"><b>Entry:</b> {getAttributeValue('Entry', ringAttributes)}</Text>
-                          <Text fontSize="md"><b>Edition:</b> {getAttributeValue('Edition', ringAttributes)}</Text>
+                          <Text fontSize="md" color="#222"><b>Entry:</b> {getAttributeValue('Entry', ringAttributes)}</Text>
+                          <Text fontSize="md" color="#222"><b>Edition:</b> {getAttributeValue('Edition', ringAttributes)}</Text>
                         </Flex>
-                        <Text fontSize="md" mb={2}><b>Inlay1:</b> {getAttributeValue('Inlay1', ringAttributes)}</Text>
+                        <Text fontSize="md" mb={2} color="#222"><b>Inlay1:</b> {getAttributeValue('Inlay1', ringAttributes)}</Text>
                       </Box>
                       {/* Engraving in its own box */}
                       <Box border="1px solid #CBD5E0" borderRadius="10px" p={3} mb={3} display="inline-block" minW="240px" boxShadow="sm" bg="white">
-                        <Text fontSize="md"><b>Engraving:</b> {getAttributeValue('Engraving', ringAttributes)}</Text>
+                        <Text fontSize="md" color="#222"><b>Engraving:</b> {getAttributeValue('Engraving', ringAttributes)}</Text>
                       </Box>
                       {/* Delivery Address and Status as bold labels at the bottom */}
                       <Box mt={3}>
                         {selectedRing.deliveryAddress && (
-                          <Text fontSize="md" fontWeight="bold" mb={2}>
+                          <Text fontSize="md" fontWeight="bold" mb={2} color="#222">
                             Delivery Address: <span style={{fontWeight: 'normal'}}>{selectedRing.deliveryAddress}</span>
                           </Text>
                         )}
                         {selectedRing.status && (
-                          <Text fontSize="md" fontWeight="bold" mb={2}>
+                          <Text fontSize="md" fontWeight="bold" mb={2} color="#222">
                             Status: <span style={{fontWeight: 'normal'}}>{selectedRing.status}</span>
                           </Text>
                         )}

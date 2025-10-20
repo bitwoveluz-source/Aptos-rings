@@ -1,0 +1,55 @@
+/* Smoke effect background animation */
+body, .smoke-bg {
+  position: relative;
+  min-height: 100vh;
+  background: #181818;
+  /* overflow: hidden; */
+}
+
+.smoke {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.smoke span {
+  position: absolute;
+  display: block;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.01) 80%, rgba(24,24,24,0) 100%);
+  border-radius: 50%;
+  filter: blur(32px);
+  animation: smokeMove 16s linear infinite;
+}
+
+.smoke span:nth-child(1) {
+  left: 10vw;
+  top: 10vh;
+  animation-delay: 0s;
+}
+.smoke span:nth-child(2) {
+  left: 60vw;
+  top: 20vh;
+  animation-delay: 4s;
+}
+.smoke span:nth-child(3) {
+  left: 30vw;
+  top: 60vh;
+  animation-delay: 8s;
+}
+.smoke span:nth-child(4) {
+  left: 80vw;
+  top: 70vh;
+  animation-delay: 12s;
+}
+
+@keyframes smokeMove {
+  0% { transform: scale(1) translateY(0); opacity: 0.7; }
+  50% { transform: scale(1.2) translateY(-40px); opacity: 0.5; }
+  100% { transform: scale(1) translateY(0); opacity: 0.7; }
+}

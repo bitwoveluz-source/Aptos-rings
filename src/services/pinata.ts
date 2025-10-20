@@ -43,3 +43,32 @@ export const uploadToPinata = async (file: File, retryCount = 0): Promise<{ ipfs
     throw new Error('Failed to upload image to IPFS: ' + (error?.response?.data?.error?.message || error.message));
   }
 };
+
+/**
+ * Delete (unpin) a file from Pinata by IPFS URL or hash
+ * @param ipfsUrlOrHash The IPFS gateway URL or just the hash
+ */
+export const deleteFromPinata = async (ipfsUrlOrHash: string): Promise<void> => {
+  // Extract hash if a URL is provided
+  let ipfsHash = ipfsUrlOrHash;
+  if (ipfsUrlOrHash.startsWith('http')) {
+    const match = ipfsUrlOrHash.match(/\/ipfs\/([A-Za-z0-9]+)/);
+    if (match && match[1]) {
+      ipfsHash = match[1];
+    } else {
+      throw new Error('Invalid IPFS URL');
+    }
+  }
+  try {
+    await axios.delete(`${PINATA_API_URL}/pinning/unpin/${ipfsHash}`, {
+      headers: {
+        Authorization: `Bearer ${JWT}`,
+      },
+    });
+    // eslint-disable-next-line no-console
+    console.log('Deleted from Pinata:', ipfsHash);
+  } catch (error: any) {
+    console.error('Error deleting from Pinata:', error?.response?.data || error.message);
+    throw new Error('Failed to delete image from Pinata: ' + (error?.response?.data?.error?.message || error.message));
+  }
+};
