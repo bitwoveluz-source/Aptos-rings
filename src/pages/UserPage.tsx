@@ -709,7 +709,7 @@ const UserPage: React.FC = () => {
         >
           <VStack spacing={6} align="stretch" w="100%" maxW="400px">
             <Heading textAlign="center" mb={4} fontSize={{ base: 'xl', md: '2xl' }}>
-              Create Your Ring NFT
+              Build Your Ring
             </Heading>
 
             <Select
