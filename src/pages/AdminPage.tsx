@@ -18,8 +18,10 @@ import {
 } from "@chakra-ui/react";
 import { DeleteIcon } from '@chakra-ui/icons';
 import { collection, addDoc, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { uploadToPinata } from '../services/pinata';
+// No duplicate import needed
 
 interface MaterialInput {
   name: string;
@@ -37,6 +39,22 @@ interface Material extends MaterialInput {
 }
 
 const AdminPage = () => {
+  type StatusType = 'all' | 'in queue' | 'crafting' | 'in transit' | 'completed';
+  const [statusFilter, setStatusFilter] = useState<StatusType>('all');
+  type RingProfile = {
+    id: string;
+    walletAddress?: string;
+    rings?: Array<{
+      metadataIpfs?: string;
+      deliveryAddress?: string;
+      status?: string;
+      attributes?: any[];
+      imageIpfs?: string;
+      [key: string]: any;
+    }>;
+    [key: string]: any;
+  };
+  const [profiles, setProfiles] = useState<RingProfile[]>([]);
   const [materialInput, setMaterialInput] = useState<MaterialInput>({
     name: '',
     type: '',
@@ -47,11 +65,216 @@ const AdminPage = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [ringMetas, setRingMetas] = useState<{ [key: string]: any }>({});
   const toast = useToast();
+  // Move all type and state declarations to the top
+  // Helper to fetch and parse ring metadata from IPFS
+  const fetchRingAttributes = async (metadataIpfs: string) => {
+    try {
+      if (!metadataIpfs) return null;
+      // Convert ipfs:// to https://gateway.pinata.cloud/ipfs/
+      const url = metadataIpfs.startsWith('ipfs://')
+        ? metadataIpfs.replace('ipfs://', 'https://gateway.pinata.cloud/ipfs/')
+        : metadataIpfs;
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      return null;
+    }
+  };
+
+  // State to store fetched ring metadata for each ring
+
+  // Fetch all ring metadata when profiles change
+
+  useEffect(() => {
+    const fetchAllRingMetas = async () => {
+      const metaPromises: Promise<[string, any]>[] = [];
+      profiles.forEach(profile => {
+        profile.rings?.forEach((ring, idx) => {
+          if (ring.metadataIpfs) {
+            const key = profile.id + '-' + idx;
+            metaPromises.push(
+              fetchRingAttributes(ring.metadataIpfs).then(meta => [key, meta])
+            );
+          }
+        });
+      });
+      const results = await Promise.all(metaPromises);
+      const metaObj: { [key: string]: any } = {};
+      results.forEach(([key, meta]) => {
+        if (meta) metaObj[key] = meta;
+      });
+      setRingMetas(metaObj);
+    };
+    if (profiles.length > 0) fetchAllRingMetas();
+  }, [profiles]);
 
   useEffect(() => {
     fetchMaterials();
+    fetchProfilesWithRings();
   }, []);
+
+  // Fetch profiles that created a ring
+  const fetchProfilesWithRings = async () => {
+    try {
+      const profilesRef = collection(db, 'walletProfiles');
+      const snapshot = await getDocs(profilesRef);
+      const profilesList = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as RingProfile))
+        .filter(profile => Array.isArray(profile.rings) && profile.rings.length > 0);
+      setProfiles(profilesList);
+    } catch (error) {
+      console.error('Error fetching profiles:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch profiles',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  // Render profiles in a table/grid
+  const renderProfilesTable = () => (
+    <Box mt={10}>
+      <Heading size="lg" mb={6} fontWeight="bold" color="#2d3748" letterSpacing="1px">Ring List</Heading>
+      {/* Status Filter Toggle */}
+      <Box mb={4} display="flex" gap={2} alignItems="center">
+        <Text fontWeight="bold" fontSize="15px" color="#2d3748" mr={2}>Show:</Text>
+        <Button
+          size="sm"
+          variant={statusFilter === 'all' ? 'solid' : 'outline'}
+          colorScheme="blue"
+          onClick={() => setStatusFilter('all')}
+        >All</Button>
+        <Button
+          size="sm"
+          variant={statusFilter === 'in queue' ? 'solid' : 'outline'}
+          colorScheme="blue"
+          onClick={() => setStatusFilter('in queue')}
+        >In Queue</Button>
+        <Button
+          size="sm"
+          variant={statusFilter === 'crafting' ? 'solid' : 'outline'}
+          colorScheme="blue"
+          onClick={() => setStatusFilter('crafting')}
+        >Crafting</Button>
+        <Button
+          size="sm"
+          variant={statusFilter === 'in transit' ? 'solid' : 'outline'}
+          colorScheme="blue"
+          onClick={() => setStatusFilter('in transit')}
+        >In Transit</Button>
+        <Button
+          size="sm"
+          variant={statusFilter === 'completed' ? 'solid' : 'outline'}
+          colorScheme="blue"
+          onClick={() => setStatusFilter('completed')}
+        >Completed</Button>
+      </Box>
+      {profiles.length === 0 ? (
+        <Text color="gray.500">No profiles have created a ring yet.</Text>
+      ) : (
+        <Box overflowX="auto">
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 12px' }}>
+            <thead>
+              <tr style={{ background: '#f7fafc' }}>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0' }}>Wallet Address</th>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0' }}>Ring Image</th>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0' }}>Attributes</th>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: '16px', color: '#2d3748', borderBottom: '2px solid #e2e8f0' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.map(profile => (
+                profile.rings?.map((ring, idx) => {
+                  if (statusFilter !== 'all' && ring.status !== statusFilter) return null;
+                  const key = profile.id + '-' + idx;
+                  const meta = ringMetas[key];
+                  return (
+                    <tr key={key} style={{ background: '#f9fafb', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', transition: 'box-shadow 0.2s', border: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '16px', fontFamily: 'monospace', fontSize: '15px', color: '#2b6cb0', background: '#edf2f7', borderRadius: '8px' }}>
+                        {profile.walletAddress
+                          ? `${profile.walletAddress.slice(0, 6)}...${profile.walletAddress.slice(-6)}`
+                          : '—'}
+                      </td>
+                      <td style={{ padding: '16px', background: '#fff', borderRadius: '8px', textAlign: 'center' }}>
+                        {meta && meta.image ? (
+                          <img src={meta.image} alt="Ring" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #cbd5e0', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }} />
+                        ) : (ring.imageIpfs ? (
+                          <img src={ring.imageIpfs} alt="Ring" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #cbd5e0', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }} />
+                        ) : '—')}
+                      </td>
+                      <td style={{ padding: '16px', background: '#f7fafc', borderRadius: '8px' }}>
+                        {meta && Array.isArray(meta.attributes) ? (
+                          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                            {meta.attributes.map((attr: any, i: number) => (
+                              <li key={i} style={{ fontSize: '14px', color: '#2d3748', marginBottom: '4px', background: '#e6fffa', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>
+                                <strong>{attr.trait_type}:</strong> {attr.value}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (Array.isArray(ring.attributes) ? (
+                          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                            {ring.attributes.map((attr: any, i: number) => (
+                              <li key={i} style={{ fontSize: '14px', color: '#2d3748', marginBottom: '4px', background: '#e6fffa', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>
+                                <strong>{attr.trait_type}:</strong> {attr.value}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : '—')}
+                        {ring.deliveryAddress && (
+                          <div style={{ fontSize: '13px', color: '#718096', marginTop: '6px', background: '#fefcbf', borderRadius: '6px', padding: '4px 8px', display: 'inline-block' }}>Delivery: {ring.deliveryAddress}</div>
+                        )}
+                      </td>
+                      <td style={{ padding: '16px', background: '#fff', borderRadius: '8px', fontWeight: 'bold', color: '#38a169', textAlign: 'center' }}>
+                        <select
+                          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', fontWeight: 'bold', color: '#2d3748', background: '#f7fafc' }}
+                          value={ring.status || ''}
+                          onChange={async (e) => {
+                            const newStatus = e.target.value;
+                            // Update status in Firestore
+                            try {
+                              const profileRef = doc(db, 'walletProfiles', profile.id);
+                              // Get current profile data
+                              const profileSnap = await getDocs(collection(db, 'walletProfiles'));
+                              const profileDoc = profileSnap.docs.find(d => d.id === profile.id);
+                              if (!profileDoc) return;
+                              const profileData = profileDoc.data();
+                              const rings = Array.isArray(profileData.rings) ? [...profileData.rings] : [];
+                              rings[idx] = { ...rings[idx], status: newStatus };
+                              await updateDoc(profileRef, { rings });
+                              // Update local state
+                              setProfiles(prev => prev.map(p =>
+                                p.id === profile.id
+                                  ? { ...p, rings: p.rings?.map((r, i) => i === idx ? { ...r, status: newStatus } : r) }
+                                  : p
+                              ));
+                            } catch (err) {
+                              toast({ title: 'Error', description: 'Failed to update status', status: 'error', duration: 3000, isClosable: true });
+                            }
+                          }}
+                        >
+                          <option value="">—</option>
+                          <option value="in queue">in queue</option>
+                          <option value="crafting">crafting</option>
+                          <option value="in transit">in transit</option>
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })
+              ))}
+            </tbody>
+          </table>
+        </Box>
+      )}
+    </Box>
+  );
 
   const fetchMaterials = async () => {
     try {
@@ -63,7 +286,7 @@ const AdminPage = () => {
         ...doc.data()
       })) as Material[];
       console.log('Materials fetched:', materialsList);
-      setMaterials(materialsList);
+  setMaterials(materialsList);
     } catch (error) {
       console.error('Error fetching materials:', error);
       toast({
@@ -203,7 +426,7 @@ const AdminPage = () => {
       console.log('Starting delete process for material:', materialId);
       
       // Get the material data
-      const material = materials.find(m => m.id === materialId);
+  const material = materials.find(m => m.id === materialId);
       console.log('Found material:', material);
       
       // Delete the document from Firestore
@@ -234,7 +457,7 @@ const AdminPage = () => {
   };
 
   const renderMaterialsByType = (type: string) => {
-    const filteredMaterials = materials.filter(material => material.type === type);
+  const filteredMaterials = materials.filter(material => material.type === type);
     return (
       <Box mb={4}>
         <Heading size="md" mb={2} textTransform="capitalize">{type} Materials</Heading>
@@ -414,6 +637,8 @@ const AdminPage = () => {
           {renderMaterialsByType('inlay3')}
           {renderMaterialsByType('finish')}
         </Box>
+        {/* New section for profiles that created a ring */}
+        {renderProfilesTable()}
       </VStack>
     </Container>
   );

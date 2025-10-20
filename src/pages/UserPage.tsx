@@ -1,4 +1,10 @@
 import React, { useState, useEffect } from 'react';
+// Helper to get attribute value by trait_type from ringAttributes
+export function getAttributeValue(traitType: string, ringAttributes: any[]): string {
+  if (!Array.isArray(ringAttributes)) return '';
+  const attr = ringAttributes.find((a: any) => a.trait_type === traitType);
+  return attr ? attr.value : '';
+}
 import {
   Box,
   Container,
@@ -20,10 +26,13 @@ import {
   useDisclosure,
 } from '@chakra-ui/react';
 import { uploadToPinata } from '../services/pinata';
-import { collection, getDocs, doc, runTransaction } from 'firebase/firestore';
+import { collection, getDocs, doc, runTransaction, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { WalletSelector } from "@aptos-labs/wallet-adapter-ant-design";
+import { createOrGetWalletProfile, addMintedRingToProfile } from '../services/firebaseProfile';
+
+import axios from 'axios';
 
 // @ts-ignore
 import singleChannelImg from '../images/single.png';
@@ -244,6 +253,7 @@ const UserPage: React.FC = () => {
   const [selectedChannels, setSelectedChannels] = useState('single'); // default to single
   const [inlays, setInlays] = useState<string[]>(['']);
   const [engraving, setEngraving] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [selectedFinish, setSelectedFinish] = useState('');
   const [aptPrice, setAptPrice] = useState<number>(8.25);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
@@ -292,7 +302,13 @@ const UserPage: React.FC = () => {
     }
   }, [selectedChannels]);
 
-  const { account, signAndSubmitTransaction } = useWallet();
+  const { account, signAndSubmitTransaction, connected } = useWallet();
+
+  useEffect(() => {
+    if (connected && account?.address) {
+      createOrGetWalletProfile(String(account.address)).catch(console.error);
+    }
+  }, [connected, account]);
 
   const handleConfirmRing = async () => {
 
@@ -437,6 +453,16 @@ const UserPage: React.FC = () => {
         duration: 5000,
         isClosable: true,
       });
+
+      // After successful mint
+      if (account?.address) {
+        await addMintedRingToProfile(String(account.address), {
+          imageIpfs: imageUrl,
+          metadataIpfs: metadataUrl,
+          deliveryAddress: deliveryAddress,
+          status: 'in queue'
+        });
+      }
     } catch (error) {
       setMintStatus('error');
       setMintMessage(error instanceof Error ? error.message : 'Failed to create ring NFT');
@@ -508,7 +534,44 @@ const UserPage: React.FC = () => {
     }
   };
 
-  const { connected } = useWallet();
+  const [ownedRings, setOwnedRings] = useState<any[]>([]);
+  const [selectedRing, setSelectedRing] = useState<any | null>(null);
+  const [ringAttributes, setRingAttributes] = useState<any[]>([]);
+  const [isRingModalOpen, setIsRingModalOpen] = useState(false);
+
+  useEffect(() => {
+    async function fetchOwnedRings() {
+      if (connected && account?.address) {
+        const profileRef = doc(db, 'walletProfiles', String(account.address));
+        const profileSnap = await getDoc(profileRef);
+        if (profileSnap.exists()) {
+          const data = profileSnap.data();
+          setOwnedRings(data.rings || []);
+        } else {
+          setOwnedRings([]);
+        }
+      }
+    }
+    fetchOwnedRings();
+  }, [connected, account]);
+
+  const handleRingClick = async (ring: any) => {
+    setSelectedRing(ring);
+    setIsRingModalOpen(true);
+    try {
+      const res = await axios.get(ring.metadataIpfs);
+      setRingAttributes(res.data.attributes || []);
+    } catch (err) {
+      setRingAttributes([]);
+    }
+  };
+  const handleCloseRingModal = () => {
+    setIsRingModalOpen(false);
+    setSelectedRing(null);
+    setRingAttributes([]);
+  };
+
+
 
   return (
     <Container maxW="container.xl" py={10}>
@@ -685,7 +748,6 @@ const UserPage: React.FC = () => {
 
             {/* Inlay 1 Dropdown */}
             <Box>
-              <Text fontSize="sm" mb={1}>Inlay 1</Text>
               <Select
                 placeholder="Select Inlay 1"
                 value={inlays[0] || ''}
@@ -706,7 +768,6 @@ const UserPage: React.FC = () => {
             {/* Inlay 2 Dropdown (only for double/triple) */}
             {(selectedChannels === 'double' || selectedChannels === 'triple') && (
               <Box>
-                <Text fontSize="sm" mb={1}>Inlay 2</Text>
                 <Select
                   placeholder="Select Inlay 2"
                   value={inlays[1] || ''}
@@ -728,7 +789,6 @@ const UserPage: React.FC = () => {
             {/* Inlay 3 Dropdown (only for triple) */}
             {selectedChannels === 'triple' && (
               <Box>
-                <Text fontSize="sm" mb={1}>Inlay 3</Text>
                 <Select
                   placeholder="Select Inlay 3"
                   value={inlays[2] || ''}
@@ -767,6 +827,16 @@ const UserPage: React.FC = () => {
                 </option>
               ))}
             </Select>
+
+            {/* Delivery Address Input - moved here */}
+            <Box>
+              <Input
+                placeholder="Enter your delivery address"
+                value={deliveryAddress}
+                onChange={e => setDeliveryAddress(e.target.value)}
+                fontSize={{ base: 'sm', md: 'md' }}
+              />
+            </Box>
 
             <Box textAlign="center" mb={4}>
               {(() => {
@@ -912,6 +982,69 @@ const UserPage: React.FC = () => {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialogOverlay>
+            </AlertDialog>
+
+            <Box mt={10} mb={4} textAlign="center">
+              <Heading size="md" mb={2}>Your Rings</Heading>
+              <Flex justify="center" gap={4} wrap="wrap">
+                {ownedRings.length === 0 ? (
+                  <Text color="gray.500">No rings minted yet.</Text>
+                ) : (
+                  ownedRings.map((ring, idx) => (
+                    <Box key={idx} border="2px solid #CBD5E0" borderRadius="md" p={2} minW="80px" minH="80px" display="flex" alignItems="center" justifyContent="center" bg="white" cursor="pointer" onClick={() => handleRingClick(ring)}>
+                      <ChakraImage src={ring.imageIpfs} alt={`Ring ${idx + 1}`} boxSize="60px" objectFit="contain" />
+                    </Box>
+                  ))
+                )}
+              </Flex>
+            </Box>
+            {/* Ring Details Modal */}
+            <AlertDialog isOpen={isRingModalOpen} onClose={handleCloseRingModal} isCentered leastDestructiveRef={cancelRef}>
+              <AlertDialogOverlay />
+              <AlertDialogContent maxW="sm" textAlign="center" py={8}>
+                <AlertDialogHeader fontSize="lg" fontWeight="bold">Ring Details</AlertDialogHeader>
+                <AlertDialogBody>
+                  {selectedRing && (
+                    <>
+                      <Box display="flex" justifyContent="center" alignItems="center" mb={6}>
+                        <ChakraImage src={selectedRing.imageIpfs} alt="Ring" boxSize="170px" objectFit="contain" borderRadius="12px" boxShadow="md" bg="gray.50" />
+                      </Box>
+                      {/* Main attributes in bordered box */}
+                      <Box border="1px solid #CBD5E0" borderRadius="10px" p={4} mb={3} display="inline-block" minW="240px" boxShadow="sm" bg="white">
+                        <Flex justify="space-between" mb={2} gap={4}>
+                          <Text fontSize="md"><b>Core:</b> {getAttributeValue('Core', ringAttributes)}</Text>
+                          <Text fontSize="md"><b>Finish:</b> {getAttributeValue('Finish', ringAttributes)}</Text>
+                        </Flex>
+                        <Flex justify="space-between" mb={2} gap={4}>
+                          <Text fontSize="md"><b>Entry:</b> {getAttributeValue('Entry', ringAttributes)}</Text>
+                          <Text fontSize="md"><b>Edition:</b> {getAttributeValue('Edition', ringAttributes)}</Text>
+                        </Flex>
+                        <Text fontSize="md" mb={2}><b>Inlay1:</b> {getAttributeValue('Inlay1', ringAttributes)}</Text>
+                      </Box>
+                      {/* Engraving in its own box */}
+                      <Box border="1px solid #CBD5E0" borderRadius="10px" p={3} mb={3} display="inline-block" minW="240px" boxShadow="sm" bg="white">
+                        <Text fontSize="md"><b>Engraving:</b> {getAttributeValue('Engraving', ringAttributes)}</Text>
+                      </Box>
+                      {/* Delivery Address and Status as bold labels at the bottom */}
+                      <Box mt={3}>
+                        {selectedRing.deliveryAddress && (
+                          <Text fontSize="md" fontWeight="bold" mb={2}>
+                            Delivery Address: <span style={{fontWeight: 'normal'}}>{selectedRing.deliveryAddress}</span>
+                          </Text>
+                        )}
+                        {selectedRing.status && (
+                          <Text fontSize="md" fontWeight="bold" mb={2}>
+                            Status: <span style={{fontWeight: 'normal'}}>{selectedRing.status}</span>
+                          </Text>
+                        )}
+                      </Box>
+                    </>
+                  )}
+                </AlertDialogBody>
+                <AlertDialogFooter>
+                  <Button onClick={handleCloseRingModal} colorScheme="blue">Close</Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
             </AlertDialog>
           </VStack>
         </Box>
