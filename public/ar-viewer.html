@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ring AR View</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+        body { margin: 0; }
+        model-viewer {
+            width: 100vw;
+            height: 100vh;
+            background-color: #ffffff;
+        }
+        .prompt {
+            position: absolute;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            border-radius: 20px;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <model-viewer
+        id="ring-model"
+        camera-controls
+        ar
+        ar-modes="webxr scene-viewer quick-look"
+        ar-scale="fixed"
+        ar-placement="floor"
+        shadow-intensity="1"
+        exposure="1"
+        environment-image="neutral"
+        auto-rotate>
+        <div class="prompt" slot="ar-prompt">
+            👆 Tap to view in your space
+        </div>
+    </model-viewer>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const modelUrl = params.get('model');
+        if (modelUrl) {
+            document.getElementById('ring-model').setAttribute('src', modelUrl);
+            document.getElementById('ring-model').setAttribute('ios-src', modelUrl);
+        }
+    </script>
+</body>
+</html>

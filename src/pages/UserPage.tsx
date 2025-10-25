@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import RingPreview from '../components/RingPreview';
 // Helper to get attribute value by trait_type from ringAttributes
 export function getAttributeValue(traitType: string, ringAttributes: any[]): string {
   if (!Array.isArray(ringAttributes)) return '';
@@ -35,12 +36,7 @@ import { createOrGetWalletProfile, addMintedRingToProfile } from '../services/fi
 
 import axios from 'axios';
 
-// @ts-ignore
-import singleChannelImg from '../images/single.png';
-// @ts-ignore
-import doubleChannelImg from '../images/double.png';
-// @ts-ignore
-import tripleChannelImg from '../images/triple.png';
+// channel images removed from selector; assets kept in repo if needed later
 
 // Helper to filter materials by type and entry
 const filterMaterialsByTypeAndEntry = (materials: Material[], type: string, entry: string) => {
@@ -59,6 +55,9 @@ interface Material {
   entry?: string;
   imageUrl?: string;
   ipfsHash?: string;
+  glbUrl?: string;  // Added for backward compatibility
+  modelUrl?: string; // Added for backward compatibility
+  modelIpfsHash?: string; // Added for backward compatibility
   price?: number;
 };
 
@@ -84,6 +83,41 @@ const getMaterialImage = (type: string, name: string, materials: Material[] = []
   }
   // Fallback placeholder
   return 'https://via.placeholder.com/350x350?text=' + encodeURIComponent(name);
+};
+
+// Helper to get 3D model for a material type
+const getMaterialModel = (type: string, name: string, materials: Material[] = [], entry?: string) => {
+  let material;
+  if (type === 'core') {
+    material = materials.find(m => m.type === 'core' && m.name === name && m.entry === entry);
+  } else if (type.startsWith('inlay')) {
+    material = materials.find(m => m.type === type && m.name === name && m.entry === entry);
+  } else if (type === 'finish') {
+    material = materials.find(m => m.type === 'finish' && m.name === name && m.entry === entry);
+  }
+
+  if (material) {
+    // Try all possible URL fields in order of preference
+    const modelUrl = (material.modelIpfsHash && `https://gateway.pinata.cloud/ipfs/${material.modelIpfsHash}`) ||
+                    (material.ipfsHash && `https://gateway.pinata.cloud/ipfs/${material.ipfsHash}`) ||
+                    material.glbUrl ||
+                    material.modelUrl ||
+                    '';
+                  
+    console.log(`[getMaterialModel] ${type} ${name}:`, {
+      material,
+      modelUrl,
+      modelIpfsHash: material.modelIpfsHash,
+      ipfsHash: material.ipfsHash,
+      glbUrl: material.glbUrl,
+      modelUrl: material.modelUrl
+    });
+    
+    return modelUrl;
+  } else {
+    console.warn(`[getMaterialModel] No material found for ${type} ${name}`);
+    return '';
+  }
 };
 
 const getNextRingNumber = async (): Promise<number> => {
@@ -124,6 +158,7 @@ const UserPage: React.FC = () => {
         const materialsSnapshot = await getDocs(materialsCollection);
         const materialsList = materialsSnapshot.docs.map(doc => {
           const data = doc.data() as any;
+          console.log('[Material Data]', doc.id, data);
           return {
             id: doc.id,
             name: data.name,
@@ -131,9 +166,12 @@ const UserPage: React.FC = () => {
             entry: data.entry,
             imageUrl: data.imageUrl,
             ipfsHash: data.ipfsHash,
+            glbUrl: data.glbUrl,
+            modelIpfsHash: data.modelIpfsHash,
             price: data.price ? Number(data.price) : 0,
           };
         });
+        console.log('[All Materials]', materialsList);
         setMaterials(materialsList);
       } catch (error) {
         console.error('Error fetching materials:', error);
@@ -176,12 +214,17 @@ const UserPage: React.FC = () => {
   return;
     }
 
-    // Capture the actual .ring-preview DOM node so the dialog shows the full-color ring
-    const ringPreviewContainer = document.querySelector('.ring-preview') as HTMLElement;
+    // Capture the ring preview with all layers
+    const ringPreviewContainer = document.querySelector('.ring-preview-container') as HTMLElement;
     if (ringPreviewContainer) {
+      // Wait a moment for any ongoing animations or renders to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       const html2canvas = (await import('html2canvas')).default;
+      console.log('[Capture] Starting ring capture process');
+      
       // Create a hidden, square, flexbox container for perfect centering
-      const imageSize = 350; // px, adjust as needed
+      const imageSize = 500; // Increased size for better quality
       const wrapper = document.createElement('div');
       wrapper.style.position = 'fixed';
       wrapper.style.left = '-9999px';
@@ -189,7 +232,9 @@ const UserPage: React.FC = () => {
       wrapper.style.width = `${imageSize}px`;
       wrapper.style.height = `${imageSize}px`;
       wrapper.style.display = 'flex';
-      wrapper.style.flexDirection = 'column';
+      wrapper.style.alignItems = 'center';
+      wrapper.style.justifyContent = 'center';
+      wrapper.style.background = 'transparent';
       wrapper.style.alignItems = 'center';
       wrapper.style.justifyContent = 'center'; // Center ring vertically
       wrapper.style.background = '#f7fafc';
@@ -317,89 +362,99 @@ const UserPage: React.FC = () => {
     setMintStatus('idle');
     setMintMessage('Minting your ring NFT. Please wait...');
     try {
-      // Always recapture the ring preview image
+      // Fetch the current ring index
+      const ringNumber = await getNextRingNumber();
+
+      // Create merged GLB from selected components
+      const glbFiles = [];
+      
+      // Add core GLB if selected
+      if (selectedCore) {
+        const coreUrl = getMaterialModel('core', selectedCore, materials, selectedChannels);
+        if (coreUrl) {
+          const coreResponse = await fetch(coreUrl);
+          const coreBlob = await coreResponse.blob();
+          glbFiles.push(coreBlob);
+        }
+      }
+
+      // Add inlay GLBs
+      for (let i = 0; i < inlays.length; i++) {
+        if (inlays[i]) {
+          const inlayUrl = getMaterialModel(`inlay${i + 1}`, inlays[i], materials, selectedChannels);
+          if (inlayUrl) {
+            const inlayResponse = await fetch(inlayUrl);
+            const inlayBlob = await inlayResponse.blob();
+            glbFiles.push(inlayBlob);
+          }
+        }
+      }
+
+      // Add finish GLB if selected
+      if (selectedFinish) {
+        const finishUrl = getMaterialModel('finish', selectedFinish, materials, selectedChannels);
+        if (finishUrl) {
+          const finishResponse = await fetch(finishUrl);
+          const finishBlob = await finishResponse.blob();
+          glbFiles.push(finishBlob);
+        }
+      }
+
+      // Wait for all models to be loaded in RingPreview
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Give time for all models to render
+
+      // Get the ring preview instance
+      const ringPreviewElement = document.querySelector('.ring-preview-container');
+      if (!ringPreviewElement) {
+        throw new Error('Ring preview not found');
+      }
+
+      // Access the Three.js scene through a custom method we'll add
+      const ringPreviewInstance = (ringPreviewElement as any).__ringPreview;
+      if (!ringPreviewInstance || !ringPreviewInstance.exportScene) {
+        throw new Error('Ring preview instance not properly initialized');
+      }
+
+      // Export the entire scene as GLB
+      const combinedGlb = await ringPreviewInstance.exportScene();
+      console.log('[Mint] Generated combined GLB:', combinedGlb);
+
+      // Create a File object from the combined GLB
+      const glbFile = new File([combinedGlb], `ring-${ringNumber}.glb`, { type: 'model/gltf-binary' });
+
+      // For display purposes in the UI, we'll still need a preview image
+      const previewUrl = URL.createObjectURL(glbFile);
+      setGeneratedImage(previewUrl);
+
+      console.log('[Mint] Uploading combined GLB file to Pinata:', glbFile);
+      // Upload GLB to Pinata
+      setMintMessage('Uploading 3D model to IPFS...');
+      const { ipfsUrl: modelUrl } = await uploadToPinata(glbFile);
+      console.log('[Mint] Received model IPFS URL:', modelUrl);
+
+      // Create a thumbnail image for display
       const ringPreviewContainer = document.querySelector('.ring-preview') as HTMLElement;
       if (!ringPreviewContainer) {
         throw new Error('Could not find ring preview container');
       }
-      // Fetch the current ring index before generating the background and for all uses
-      const ringNumber = await getNextRingNumber();
       const html2canvas = (await import('html2canvas')).default;
       const imageSize = 350;
-      const wrapper = document.createElement('div');
-      wrapper.style.position = 'fixed';
-      wrapper.style.left = '-9999px';
-      wrapper.style.top = '0';
-      wrapper.style.width = `${imageSize}px`;
-      wrapper.style.height = `${imageSize}px`;
-      wrapper.style.display = 'flex';
-      wrapper.style.flexDirection = 'column';
-      wrapper.style.alignItems = 'center';
-      wrapper.style.justifyContent = 'center';
-      // Shift hue for each ring number, keep background very pale
-      const hue = (ringNumber * 37) % 360; // 37 is arbitrary for visible shift
-      wrapper.style.background = `hsl(${hue}, 60%, 98%)`;
-      wrapper.style.overflow = 'hidden';
-      wrapper.style.borderRadius = '12px';
-      const clone = ringPreviewContainer.cloneNode(true) as HTMLElement;
-      clone.style.position = 'static';
-      clone.style.margin = '0';
-      clone.style.left = 'unset';
-      clone.style.top = 'unset';
-      clone.style.transform = 'none';
-      clone.style.maxWidth = '90%';
-      clone.style.maxHeight = '90%';
-      clone.style.width = 'auto';
-      clone.style.height = 'auto';
-      const images = clone.querySelectorAll('img');
-      images.forEach(img => {
-        img.style.position = 'static';
-        img.style.top = 'unset';
-        img.style.left = 'unset';
-        img.style.right = 'unset';
-        img.style.bottom = 'unset';
-        img.style.transform = 'none';
-        img.style.margin = '0 auto';
-        img.style.display = 'block';
-        img.style.maxWidth = '90%';
-        img.style.maxHeight = '90%';
-        img.style.width = 'auto';
-        img.style.height = 'auto';
-      });
-      wrapper.appendChild(clone);
-      document.body.appendChild(wrapper);
-      const canvas = await html2canvas(wrapper, {
+      const canvas = await html2canvas(ringPreviewContainer, {
         backgroundColor: null,
         width: imageSize,
         height: imageSize,
         scale: 1,
         useCORS: true,
       });
-      // Force uniqueness: set a single pixel to a random color (invisible to user)
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        const x = imageSize - 1;
-        const y = imageSize - 1;
-        const r = Math.floor(Math.random() * 256);
-        const g = Math.floor(Math.random() * 256);
-        const b = Math.floor(Math.random() * 256);
-        ctx.fillStyle = `rgba(${r},${g},${b},0.01)`; // almost invisible
-        ctx.fillRect(x, y, 1, 1);
-      }
-      const dataUrl = canvas.toDataURL('image/png');
-      setGeneratedImage(dataUrl);
-      document.body.removeChild(wrapper);
-
-      // Convert base64 image to file, using the indexed ring number for the filename
-      const imageFile = await fetch(dataUrl)
+      const thumbnailDataUrl = canvas.toDataURL('image/png');
+      const thumbnailFile = await fetch(thumbnailDataUrl)
         .then(res => res.blob())
-        .then(blob => new File([blob], `ring-${ringNumber}.png`, { type: 'image/png' }));
+        .then(blob => new File([blob], `ring-${ringNumber}-thumbnail.png`, { type: 'image/png' }));
 
-        console.log('[Mint] Uploading image file to Pinata:', imageFile);
-      // Upload image to Pinata
-      setMintMessage('Uploading image to IPFS...');
-        const { ipfsUrl: imageUrl } = await uploadToPinata(imageFile);
-        console.log('[Mint] Received image IPFS URL:', imageUrl);
+      console.log('[Mint] Uploading thumbnail to Pinata:', thumbnailFile);
+      setMintMessage('Uploading thumbnail to IPFS...');
+      const { ipfsUrl: imageUrl } = await uploadToPinata(thumbnailFile);
+      console.log('[Mint] Received thumbnail IPFS URL:', imageUrl);
 
       // Create metadata JSON
         console.log('[Mint] Creating metadata JSON with image URL:', imageUrl);
@@ -408,6 +463,7 @@ const UserPage: React.FC = () => {
         name: `Ring #${ringNumber}`,
         description: "Aptos Rings NFT",
         image: imageUrl,
+        animation_url: modelUrl, // 3D model GLB file
         attributes: [
           { trait_type: "Core", value: selectedCore },
           { trait_type: "Entry", value: selectedChannels },
@@ -557,12 +613,20 @@ const UserPage: React.FC = () => {
   }, [connected, account]);
 
   const handleRingClick = async (ring: any) => {
-    setSelectedRing(ring);
-    setIsRingModalOpen(true);
     try {
       const res = await axios.get(ring.metadataIpfs);
       setRingAttributes(res.data.attributes || []);
+      setSelectedRing(ring);
+      setIsRingModalOpen(true);
     } catch (err) {
+      console.error('Error fetching ring metadata:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to load ring details',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
       setRingAttributes([]);
     }
   };
@@ -598,106 +662,24 @@ const UserPage: React.FC = () => {
         direction={{ base: 'column', md: 'row' }}
         gap={{ base: 8, md: 0 }}
       >
-        {/* Left: Layered Ring Illustration */}
+        {/* Left: 3D Ring Preview */}
         <Box
           flex="1"
           display="flex"
           alignItems="center"
           justifyContent="center"
           mb={{ base: 8, md: 0 }}
-          position="relative"
-          minH={{ base: '220px', md: '350px' }}
           className="ring-preview"
-          sx={{
-            animation: 'ringHover 2.2s ease-in-out infinite',
-            '@keyframes ringHover': {
-              '0%': { transform: 'translateY(0)' },
-              '50%': { transform: 'translateY(-12px)' },
-              '100%': { transform: 'translateY(0)' },
-            },
-            '& > img': {
-              position: 'absolute !important',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              pointerEvents: 'none'
-            }
-          }}
         >
-          {/* Channel image (always present) */}
-          <ChakraImage
-            src={
-              selectedChannels === 'single' ? singleChannelImg :
-              selectedChannels === 'double' ? doubleChannelImg :
-              selectedChannels === 'triple' ? tripleChannelImg : singleChannelImg
-            }
-            alt="Channel"
-            position="absolute"
-            top={0}
-            left={0}
-            right={0}
-            bottom={0}
-            m="auto"
-            maxW={{ base: '220px', md: '350px' }}
-            maxH={{ base: '220px', md: '350px' }}
-            zIndex={1}
+          <RingPreview
+            coreUrl={selectedCore ? getMaterialModel('core', selectedCore, materials, selectedChannels) : undefined}
+            inlayUrls={inlays.map((inlay, idx) => 
+              inlay ? getMaterialModel(`inlay${idx + 1}`, inlay, materials, selectedChannels) : ''
+            ).filter(Boolean)}
+            finishUrl={selectedFinish ? getMaterialModel('finish', selectedFinish, materials, selectedChannels) : undefined}
+            width={350}
+            height={350}
           />
-          {/* Core image */}
-          {selectedCore && (
-            <ChakraImage
-              src={getMaterialImage('core', selectedCore, materials, selectedChannels)}
-              alt={selectedCore}
-              position="absolute"
-              top={0}
-              left={0}
-              right={0}
-              bottom={0}
-              m="auto"
-              maxW={{ base: '220px', md: '350px' }}
-              maxH={{ base: '220px', md: '350px' }}
-              zIndex={2}
-              opacity={0.85}
-            />
-          )}
-          {/* Inlay images */}
-          {inlays.map((inlay, idx) => {
-            const inlayType = `inlay${idx + 1}`;
-            return inlay ? (
-              <ChakraImage
-                key={idx}
-                src={getMaterialImage(inlayType, inlay, materials, selectedChannels)}
-                alt={`Inlay ${idx + 1}: ${inlay}`}
-                position="absolute"
-                top={0}
-                left={0}
-                right={0}
-                bottom={0}
-                m="auto"
-                maxW={{ base: '220px', md: '350px' }}
-                maxH={{ base: '220px', md: '350px' }}
-                zIndex={3 + idx}
-                opacity={0.7}
-                data-inlay={inlayType}
-              />
-            ) : null;
-          })}
-          {/* Finish image */}
-          {selectedFinish && (
-            <ChakraImage
-              src={getMaterialImage('finish', selectedFinish, materials, selectedChannels)}
-              alt={selectedFinish}
-              position="absolute"
-              top={0}
-              left={0}
-              right={0}
-              bottom={0}
-              m="auto"
-              maxW={{ base: '220px', md: '350px' }}
-              maxH={{ base: '220px', md: '350px' }}
-              zIndex={10}
-              opacity={0.5}
-            />
-          )}
         </Box>
         {/* Right: Form */}
         <Box
@@ -741,7 +723,6 @@ const UserPage: React.FC = () => {
                 onClick={() => setSelectedChannels('single')}
                 _hover={{ border: '2px solid #3182ce', bg: 'blue.50' }}
               >
-                <ChakraImage src={singleChannelImg} alt="Single Channel" boxSize="60px" objectFit="contain" />
                 <Text fontSize="sm" textAlign="center">Single</Text>
               </Box>
               <Box
@@ -753,7 +734,6 @@ const UserPage: React.FC = () => {
                 onClick={() => setSelectedChannels('double')}
                 _hover={{ border: '2px solid #3182ce', bg: 'blue.50' }}
               >
-                <ChakraImage src={doubleChannelImg} alt="Double Channel" boxSize="60px" objectFit="contain" />
                 <Text fontSize="sm" textAlign="center">Double</Text>
               </Box>
               <Box
@@ -765,7 +745,6 @@ const UserPage: React.FC = () => {
                 onClick={() => setSelectedChannels('triple')}
                 _hover={{ border: '2px solid #3182ce', bg: 'blue.50' }}
               >
-                <ChakraImage src={tripleChannelImg} alt="Triple Channel" boxSize="60px" objectFit="contain" />
                 <Text fontSize="sm" textAlign="center">Triple</Text>
               </Box>
             </Flex>
@@ -976,32 +955,28 @@ const UserPage: React.FC = () => {
                         </>
                       );
                     })()}
-                    {generatedImage && (
-                      <Box 
-                        position="relative"
-                        width={{ base: "220px", md: "350px" }}
-                        height={{ base: "220px", md: "350px" }}
-                        mx="auto"
-                        display="flex"
-                        alignItems="center" // Center image vertically
-                        justifyContent="center"
-                        bg="gray.50"
-                        borderRadius="md"
-                        overflow="hidden"
-                      >
-                        <ChakraImage 
-                          src={generatedImage} 
-                          alt="Generated Ring" 
-                          maxW={{ base: "220px", md: "350px" }}
-                          maxH={{ base: "220px", md: "350px" }}
-                          objectFit="contain"
-                          mb={4} // Add margin-bottom to nudge image lower
-                          sx={{
-                            imageRendering: "high-quality"
-                          }}
-                        />
-                      </Box>
-                    )}
+                    <Box 
+                      position="relative"
+                      width={{ base: "220px", md: "350px" }}
+                      height={{ base: "220px", md: "350px" }}
+                      mx="auto"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      bg="transparent"
+                      borderRadius="md"
+                      overflow="hidden"
+                    >
+                      <RingPreview
+                        coreUrl={selectedCore ? getMaterialModel('core', selectedCore, materials, selectedChannels) : undefined}
+                        inlayUrls={inlays.map((inlay, idx) => 
+                          inlay ? getMaterialModel(`inlay${idx + 1}`, inlay, materials, selectedChannels) : ''
+                        ).filter(Boolean)}
+                        finishUrl={selectedFinish ? getMaterialModel('finish', selectedFinish, materials, selectedChannels) : undefined}
+                        width={350}
+                        height={350}
+                      />
+                    </Box>
                   </AlertDialogBody>
 
                   <AlertDialogFooter>

@@ -28,10 +28,7 @@ interface MaterialInput {
   name: string;
   type: string;
   entry?: string;
-  imageUrl?: string;
-  ipfsHash?: string;
-  metadataUrl?: string;
-  metadataHash?: string;
+  glbUrl?: string;
   price?: number;
 }
 
@@ -63,37 +60,22 @@ const AdminPage = () => {
     }
     setIsUploading(true);
     try {
-      // Build metadata for Pinata
-      const metadata = {
+      // Upload GLB file to Pinata (if selected) and store only required fields in Firestore
+      let glbUrl = '';
+      if (selectedImage) {
+        const { ipfsUrl } = await uploadToPinata(selectedImage);
+        glbUrl = ipfsUrl;
+      }
+      const materialsRef = collection(db, 'materials');
+      const newMaterial = {
         name: materialInput.name,
         type: materialInput.type,
         entry: materialInput.entry || 'single',
-        price: materialInput.price,
-      };
-      const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
-      const metadataFile = new File([metadataBlob], `${materialInput.name.toLowerCase().replace(/\s+/g, '-')}-metadata.json`, { type: 'application/json' });
-      // Upload metadata to Pinata
-      const { ipfsUrl: metadataUrl, ipfsHash: metadataHash } = await uploadToPinata(metadataFile);
-      // Upload image if selected
-      let imageUrl = '';
-      let imageHash = '';
-      if (selectedImage) {
-        const { ipfsUrl, ipfsHash } = await uploadToPinata(selectedImage);
-        imageUrl = ipfsUrl;
-        imageHash = ipfsHash;
-      }
-      // Add new material with IPFS data
-      const materialsRef = collection(db, 'materials');
-      const newMaterial = {
-        ...materialInput,
-        imageUrl,
-        ipfsHash: imageHash,
-        metadataUrl,
-        metadataHash,
-        createdAt: new Date().toISOString(),
+        price: materialInput.price ?? 0,
+        glbUrl,
       };
       await addDoc(materialsRef, newMaterial);
-      setMaterialInput({ name: '', type: '', entry: '', imageUrl: '', price: 0 });
+      setMaterialInput({ name: '', type: '', entry: '', glbUrl: '', price: 0 });
       setSelectedImage(null);
       toast({
         title: 'Success',
@@ -135,11 +117,12 @@ const AdminPage = () => {
     name: '',
     type: '',
     entry: '',
-    imageUrl: '',
+    glbUrl: '',
     price: 0
   });
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imageLoadError, setImageLoadError] = useState<Record<string, boolean>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [ringMetas, setRingMetas] = useState<{ [key: string]: any }>({});
   const toast = useToast();
@@ -534,14 +517,31 @@ const AdminPage = () => {
             {filteredMaterials.map(material => (
               <HStack key={material.id} justify="space-between" p={2} bg="gray.50" borderRadius="md">
                 <HStack spacing={3}>
-                  {material.imageUrl && (
-                    <Image
-                      src={material.imageUrl}
-                      alt={material.name}
-                      boxSize="40px"
-                      objectFit="cover"
-                      borderRadius="md"
-                    />
+                  {material.glbUrl ? (
+                    <Box>
+                      <Text fontSize="xs">
+                        <a href={material.glbUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#6b46c1' }}>View 3D model</a>
+                      </Text>
+                    </Box>
+                  ) : (
+                    (material as any).imageUrl && (
+                      !imageLoadError[material.id] ? (
+                        <Image
+                          src={(material as any).imageUrl}
+                          alt={material.name}
+                          boxSize="40px"
+                          objectFit="cover"
+                          borderRadius="md"
+                          onError={() => setImageLoadError(prev => ({ ...prev, [material.id]: true }))}
+                        />
+                      ) : (
+                        <Box>
+                          <Text fontSize="xs">
+                            <a href={(material as any).imageUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#6b46c1' }}>View file</a>
+                          </Text>
+                        </Box>
+                      )
+                    )
                   )}
                   <Box>
                     <Text>{material.name}</Text>
@@ -574,7 +574,7 @@ const AdminPage = () => {
         <Box bg="white" p={6} borderRadius="lg" boxShadow="sm">
           <Heading size="md" mb={4}>Add New Material</Heading>
           <FormControl>
-            <FormLabel>Material Name</FormLabel>
+            <FormLabel color="#111">Material Name</FormLabel>
             <Input
               name="name"
               value={materialInput.name}
@@ -584,7 +584,27 @@ const AdminPage = () => {
             />
           </FormControl>
           <FormControl mb={4} isRequired>
-            <FormLabel>Entry</FormLabel>
+            <FormLabel color="#111" requiredIndicator={false}>Material Type</FormLabel>
+            <Select
+              name="type"
+              value={materialInput.type}
+              onChange={handleInputChange}
+              placeholder="Select material type"
+              bg="#222"
+              color="#e2e8f0"
+              _placeholder={{ color: '#a0aec0' }}
+              borderColor="#444"
+              sx={{ option: { background: '#222', color: '#e2e8f0' } }}
+            >
+              <option value="core">Core</option>
+              <option value="inlay1">Inlay 1</option>
+              <option value="inlay2">Inlay 2</option>
+              <option value="inlay3">Inlay 3</option>
+              <option value="finish">Finish</option>
+            </Select>
+          </FormControl>
+          <FormControl mb={4} isRequired>
+            <FormLabel color="#111" requiredIndicator={false}>Entry</FormLabel>
             <Select
               name="entry"
               value={materialInput.entry}
@@ -601,19 +621,33 @@ const AdminPage = () => {
               <option value="triple">Triple</option>
             </Select>
           </FormControl>
+          <FormControl mb={4} isRequired>
+            <FormLabel color="#111" requiredIndicator={false}>Material Price</FormLabel>
+            <Input
+              type="number"
+              name="price"
+              value={materialInput.price}
+              onChange={handleInputChange}
+              placeholder="Enter price (e.g. 10.5)"
+              min={0}
+              step={0.01}
+              color="#111"
+            />
+          </FormControl>
           <FormControl mt={4}>
-            <FormLabel>Material Image</FormLabel>
+            <FormLabel color="#111">Material 3D Model (.glb)</FormLabel>
             <Input
               type="file"
-              accept=".jpg,.jpeg,.png,.webp,.jfif"
+              accept=".glb"
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (file) {
-                  // Check file size (max 2MB)
-                  if (file.size > 2 * 1024 * 1024) {
+                  // Allow larger GLB files (max 20MB)
+                  const maxSize = 20 * 1024 * 1024;
+                  if (file.size > maxSize) {
                     toast({
                       title: 'Error',
-                      description: 'Image size should be less than 2MB',
+                      description: 'GLB file size should be less than 20MB',
                       status: 'error',
                       duration: 3000,
                       isClosable: true,
@@ -621,12 +655,14 @@ const AdminPage = () => {
                     e.target.value = '';
                     return;
                   }
-                  // Check file type
-                  const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/jfif'];
-                  if (!validTypes.includes(file.type)) {
+                  // Validate by extension and type (some browsers report application/octet-stream)
+                  const nameLower = file.name.toLowerCase();
+                  const isGlbExt = nameLower.endsWith('.glb');
+                  const validTypes = ['model/gltf-binary', 'application/octet-stream'];
+                  if (!isGlbExt && !validTypes.includes(file.type)) {
                     toast({
                       title: 'Error',
-                      description: 'Please upload a valid image file (JPG, PNG, or WebP)',
+                      description: 'Please upload a valid GLB file (.glb)',
                       status: 'error',
                       duration: 3000,
                       isClosable: true,
@@ -634,7 +670,7 @@ const AdminPage = () => {
                     e.target.value = '';
                     return;
                   }
-                  console.log('File selected:', {
+                  console.log('GLB selected:', {
                     name: file.name,
                     type: file.type,
                     size: `${(file.size / (1024 * 1024)).toFixed(2)}MB`
@@ -653,7 +689,7 @@ const AdminPage = () => {
               </Box>
             )}
             <Text fontSize="xs" color="gray.500" mt={1}>
-              Accepted formats: JPG, JFIF, PNG, WebP (Max size: 2MB)
+              Accepted format: .glb (Max size: 20MB)
             </Text>
           </FormControl>
 
