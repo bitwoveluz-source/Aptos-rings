@@ -197,7 +197,8 @@ const GalleryPage: React.FC = () => {
         actualImage: string; 
         status: string; 
         walletAddress: string; 
-        attributes: any[]; 
+        attributes: any[];
+        usdzUrl?: string; 
         profileId: string; 
         metadataIpfs?: string;
         animation_url?: string;  // Add GLB model URL property

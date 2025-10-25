@@ -109,8 +109,7 @@ const getMaterialModel = (type: string, name: string, materials: Material[] = []
       modelUrl,
       modelIpfsHash: material.modelIpfsHash,
       ipfsHash: material.ipfsHash,
-      glbUrl: material.glbUrl,
-      modelUrl: material.modelUrl
+      glbUrl: material.glbUrl
     });
     
     return modelUrl;

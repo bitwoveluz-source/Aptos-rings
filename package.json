@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node ./node_modules/typescript/bin/tsc && vite build",
+    "build": "npm install --legacy-peer-deps && node ./node_modules/typescript/bin/tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -17,10 +17,10 @@
     "@chakra-ui/react": "^2.8.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
-    "@google/model-viewer": "^4.1.0",
+    "@google/model-viewer": "3.3.0",
     "@telegram-apps/bridge": "^1.0.0",
     "@types/qrcode.react": "^1.0.5",
-    "@types/three": "^0.180.0",
+    "@types/three": "0.152.1",
     "@wallet-standard/core": "^1.1.1",
     "aptos": "^1.19.0",
     "axios": "^1.12.2",
@@ -33,7 +33,7 @@
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",
     "react-router-dom": "^6.15.0",
-    "three": "^0.180.0"
+    "three": "0.152.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.21",
