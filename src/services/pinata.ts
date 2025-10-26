@@ -6,10 +6,36 @@ const JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaW
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+const getContentTypeFromFileName = (filename: string): string => {
+  const ext = filename.toLowerCase().split('.').pop();
+  switch (ext) {
+    case 'glb':
+      return 'model/gltf-binary';
+    case 'usdz':
+      return 'model/vnd.usdz+zip';
+    case 'gltf':
+      return 'model/gltf+json';
+    default:
+      return 'application/octet-stream';
+  }
+};
+
 export const uploadToPinata = async (file: File, retryCount = 0): Promise<{ ipfsHash: string; ipfsUrl: string }> => {
   const maxRetries = 3;
   const formData = new FormData();
+  
+  // Set the correct content type based on file extension
+  const options = {
+    pinataMetadata: {
+      name: file.name,
+      keyvalues: {
+        contentType: file.type || getContentTypeFromFileName(file.name)
+      }
+    }
+  };
+  
   formData.append('file', file);
+  formData.append('pinataOptions', JSON.stringify(options));
 
   try {
     const response = await axios.post(`${PINATA_API_URL}/pinning/pinFileToIPFS`, formData, {

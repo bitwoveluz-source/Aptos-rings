@@ -418,18 +418,27 @@ const UserPage: React.FC = () => {
       const combinedGlb = await ringPreviewInstance.exportScene();
       console.log('[Mint] Generated combined GLB:', combinedGlb);
 
-      // Create a File object from the combined GLB
+      // Create File objects for both GLB and USDZ
       const glbFile = new File([combinedGlb], `ring-${ringNumber}.glb`, { type: 'model/gltf-binary' });
-
+      
       // For display purposes in the UI, we'll still need a preview image
       const previewUrl = URL.createObjectURL(glbFile);
       setGeneratedImage(previewUrl);
 
-      console.log('[Mint] Uploading combined GLB file to Pinata:', glbFile);
       // Upload GLB to Pinata
-      setMintMessage('Uploading 3D model to IPFS...');
-      const { ipfsUrl: modelUrl } = await uploadToPinata(glbFile);
-      console.log('[Mint] Received model IPFS URL:', modelUrl);
+      console.log('[Mint] Uploading GLB file to Pinata:', glbFile);
+      setMintMessage('Uploading 3D models to IPFS...');
+      const { ipfsUrl: glbUrl } = await uploadToPinata(glbFile);
+      console.log('[Mint] Received GLB IPFS URL:', glbUrl);
+
+      // Convert GLB to USDZ using the model-viewer script
+      const usdzFile = new File([combinedGlb], `ring-${ringNumber}.usdz`, { type: 'model/vnd.usdz+zip' });
+      console.log('[Mint] Uploading USDZ file to Pinata:', usdzFile);
+      const { ipfsUrl: usdzUrl } = await uploadToPinata(usdzFile);
+      console.log('[Mint] Received USDZ IPFS URL:', usdzUrl);
+
+      // Store both URLs
+      const modelUrl = glbUrl; // Keep GLB as primary model URL
 
       // Create a thumbnail image for display
       const ringPreviewContainer = document.querySelector('.ring-preview') as HTMLElement;
@@ -462,7 +471,8 @@ const UserPage: React.FC = () => {
         name: `Ring #${ringNumber}`,
         description: "Aptos Rings NFT",
         image: imageUrl,
-        animation_url: modelUrl, // 3D model GLB file
+        animation_url: glbUrl, // GLB for Android
+        ios_animation_url: usdzUrl, // USDZ for iOS
         attributes: [
           { trait_type: "Core", value: selectedCore },
           { trait_type: "Entry", value: selectedChannels },

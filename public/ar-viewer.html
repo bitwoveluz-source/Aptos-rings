@@ -44,9 +44,15 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const modelUrl = params.get('model');
+        const iosModelUrl = params.get('ios-model');
+        const viewer = document.getElementById('ring-model');
+        
         if (modelUrl) {
-            document.getElementById('ring-model').setAttribute('src', modelUrl);
-            document.getElementById('ring-model').setAttribute('ios-src', modelUrl);
+            viewer.setAttribute('src', modelUrl);
+        }
+        
+        if (iosModelUrl) {
+            viewer.setAttribute('ios-src', iosModelUrl);
         }
     </script>
 </body>

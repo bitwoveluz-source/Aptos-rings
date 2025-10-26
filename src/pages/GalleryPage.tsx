@@ -60,13 +60,13 @@ const ARQRCodeModal = ({ isOpen, onClose, modelUrl }: {
 }) => {
   // Create AR viewer URLs for both platforms
   const baseUrl = window.location.origin;
+  
+  // For Android, we use the GLB file in the AR viewer
   const androidUrl = `${baseUrl}/ar-viewer.html?model=${encodeURIComponent(modelUrl)}`;
   
-  // Convert GLB URL to USDZ URL (assuming the USDZ is stored with the same name but different extension)
+  // For iOS, we need both GLB and USDZ for fallback
   const usdzUrl = modelUrl.replace('.glb', '.usdz');
-  
-  // Create iOS Quick Look URL
-  const iosUrl = `${usdzUrl}#allowsContentScaling=0`;
+  const iosUrl = `${baseUrl}/ar-viewer.html?model=${encodeURIComponent(modelUrl)}&ios-model=${encodeURIComponent(usdzUrl)}#allowsContentScaling=0`;
   
   return (
     <Modal isOpen={isOpen} onClose={onClose} isCentered size="xl">
